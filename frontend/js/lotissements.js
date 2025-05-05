@@ -246,14 +246,12 @@ function openLotissementModal(lotissement = null) {
 
     console.log('Showing modal');
     elements.modal.classList.remove('hidden');
-    elements.modal.classList.add('flex');
 }
 
 function closeLotissementModal() {
     if (!elements.modal || !elements.modalForm) return;
     
     elements.modal.classList.add('hidden');
-    elements.modal.classList.remove('flex');
     elements.modalForm.reset();
 }
 
