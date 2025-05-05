@@ -29,6 +29,7 @@ const elements = {
 
 // Initialisation
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('DOM Content Loaded - Attributaires');
     await loadIlotsLots();
     await loadAttributaires();
     setupEventListeners();
@@ -36,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupTypePersonneChange();
 });
 
-// Chargement des ilots/lots (pour le select)
+// Chargement des ilots/lots
 async function loadIlotsLots() {
     try {
         const response = await window.app.api.get('/ilots-lots');
@@ -72,43 +73,113 @@ async function loadAttributaires() {
     }
 }
 
+// Configuration des écouteurs d'événements
+function setupEventListeners() {
+    console.log('Setting up event listeners - Attributaires');
+    
+    // Bouton Nouvel Attributaire
+    const btnNewAttributaire = document.getElementById('btnNewAttributaire');
+    if (btnNewAttributaire) {
+        console.log('Found New Attributaire button');
+        btnNewAttributaire.addEventListener('click', () => {
+            console.log('Opening attributaire modal...');
+            openAttributaireModal();
+        });
+    }
+
+    // Type de personne change
+    const typePersonneSelect = elements.modalForm?.elements['typePersonne'];
+    if (typePersonneSelect) {
+        typePersonneSelect.addEventListener('change', handleTypePersonneChange);
+    }
+
+    // Recherche et filtres
+    elements.searchInput?.addEventListener('input', e => {
+        state.filters.search = e.target.value;
+        state.currentPage = 1;
+        updateTable();
+        updatePagination();
+    });
+
+    elements.filterTypePersonne?.addEventListener('change', e => {
+        state.filters.typePersonne = e.target.value;
+        state.currentPage = 1;
+        updateTable();
+        updatePagination();
+    });
+
+    elements.filterNationalite?.addEventListener('change', e => {
+        state.filters.nationalite = e.target.value;
+        state.currentPage = 1;
+        updateTable();
+        updatePagination();
+    });
+
+    // Pagination
+    elements.prevPageBtn?.addEventListener('click', () => {
+        if (state.currentPage > 1) {
+            state.currentPage--;
+            updateTable();
+            updatePagination();
+        }
+    });
+
+    elements.nextPageBtn?.addEventListener('click', () => {
+        const totalPages = Math.ceil(filterAttributaires().length / state.itemsPerPage);
+        if (state.currentPage < totalPages) {
+            state.currentPage++;
+            updateTable();
+            updatePagination();
+        }
+    });
+
+    // Formulaire
+    elements.modalForm?.addEventListener('submit', handleFormSubmit);
+}
+
 // Mise à jour du tableau
 function updateTable() {
+    if (!elements.tableBody) return;
+    
     const start = (state.currentPage - 1) * state.itemsPerPage;
     const end = start + state.itemsPerPage;
     const filteredAttributaires = filterAttributaires();
     
     elements.tableBody.innerHTML = '';
     
-    filteredAttributaires.slice(start, end).forEach(attr => {
-        const ilotLot = state.ilotsLots.find(il => il.id === attr.ilotsLotsId);
-        const nomDenomination = attr.typePersonne === 'Morale' ? attr.denomination : `${attr.nom} ${attr.prenom || ''}`;
-        const contact = `${attr.telephoneMobile}${attr.email ? ' / ' + attr.email : ''}`;
-        const ilotLotText = ilotLot ? `${ilotLot.ilot} / ${ilotLot.lot}` : 'N/A';
-        const nationalite = attr.nationalite || '';
+    filteredAttributaires.slice(start, end).forEach(attributaire => {
+        const ilotLot = state.ilotsLots.find(il => il.id === attributaire.ilotsLotsId);
+        const nomComplet = attributaire.typePersonne === 'Morale' 
+            ? attributaire.denomination 
+            : `${attributaire.civilite || ''} ${attributaire.nom} ${attributaire.prenom || ''}`.trim();
         
         const row = document.createElement('tr');
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">${nomDenomination}</div>
+                <div class="text-sm font-medium text-gray-900">${nomComplet}</div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-500">${attr.typePersonne}</div>
+                <div class="text-sm text-gray-500">${attributaire.typePersonne}</div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-500">${contact}</div>
+                <div class="text-sm text-gray-500">
+                    ${attributaire.telephoneMobile}<br>
+                    ${attributaire.email || ''}
+                </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-500">${ilotLotText}</div>
+                <div class="text-sm text-gray-500">
+                    ${ilotLot ? `${ilotLot.ilot} / ${ilotLot.lot}` : 'N/A'}
+                </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-500">${nationalite}</div>
+                <div class="text-sm text-gray-500">${attributaire.nationalite}</div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                <button onclick="editAttributaire(${attr.id})" class="text-blue-600 hover:text-blue-900 mr-3">
+                <button onclick="editAttributaire(${attributaire.id})" class="text-blue-600 hover:text-blue-900 mr-3">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button onclick="deleteAttributaire(${attr.id})" class="text-red-600 hover:text-red-900">
+                <button onclick="deleteAttributaire(${attributaire.id})" class="text-red-600 hover:text-red-900">
                     <i class="fas fa-trash"></i>
                 </button>
             </td>
@@ -119,20 +190,20 @@ function updateTable() {
 
 // Filtrage des attributaires
 function filterAttributaires() {
-    return state.attributaires.filter(attr => {
-        const nomDenomination = attr.typePersonne === 'Morale' ? attr.denomination : `${attr.nom} ${attr.prenom || ''}`;
-        const searchText = `${nomDenomination} ${attr.typePersonne} ${attr.nationalite}`.toLowerCase();
-        
+    return state.attributaires.filter(attributaire => {
+        const searchText = `${attributaire.nom} ${attributaire.prenom || ''} ${attributaire.denomination || ''} ${attributaire.telephoneMobile}`.toLowerCase();
         const matchSearch = searchText.includes(state.filters.search.toLowerCase());
-        const matchTypePersonne = !state.filters.typePersonne || attr.typePersonne === state.filters.typePersonne;
-        const matchNationalite = !state.filters.nationalite || attr.nationalite === state.filters.nationalite;
+        const matchType = !state.filters.typePersonne || attributaire.typePersonne === state.filters.typePersonne;
+        const matchNationalite = !state.filters.nationalite || attributaire.nationalite === state.filters.nationalite;
         
-        return matchSearch && matchTypePersonne && matchNationalite;
+        return matchSearch && matchType && matchNationalite;
     });
 }
 
 // Mise à jour de la pagination
 function updatePagination() {
+    if (!elements.startCount || !elements.endCount || !elements.totalCount) return;
+    
     const filteredTotal = filterAttributaires().length;
     const totalPages = Math.ceil(filteredTotal / state.itemsPerPage);
     const start = ((state.currentPage - 1) * state.itemsPerPage) + 1;
@@ -142,69 +213,24 @@ function updatePagination() {
     elements.endCount.textContent = end;
     elements.totalCount.textContent = filteredTotal;
     
-    elements.prevPageBtn.disabled = state.currentPage === 1;
-    elements.nextPageBtn.disabled = state.currentPage === totalPages || totalPages === 0;
+    if (elements.prevPageBtn) {
+        elements.prevPageBtn.disabled = state.currentPage === 1;
+    }
+    if (elements.nextPageBtn) {
+        elements.nextPageBtn.disabled = state.currentPage === totalPages || totalPages === 0;
+    }
 }
 
 // Chargement des filtres
 async function loadFilters() {
-    const nationalites = [...new Set(state.attributaires.map(a => a.nationalite))];
+    if (!elements.filterNationalite) return;
     
+    const nationalites = [...new Set(state.attributaires.map(a => a.nationalite))];
     elements.filterNationalite.innerHTML = '<option value="">Toutes les nationalités</option>' +
         nationalites.map(n => `<option value="${n}">${n}</option>`).join('');
 }
 
-// Configuration des écouteurs d'événements
-function setupEventListeners() {
-    // Recherche
-    elements.searchInput.addEventListener('input', e => {
-        state.filters.search = e.target.value;
-        state.currentPage = 1;
-        updateTable();
-        updatePagination();
-    });
-
-    // Filtres
-    elements.filterTypePersonne.addEventListener('change', e => {
-        state.filters.typePersonne = e.target.value;
-        state.currentPage = 1;
-        updateTable();
-        updatePagination();
-    });
-
-    elements.filterNationalite.addEventListener('change', e => {
-        state.filters.nationalite = e.target.value;
-        state.currentPage = 1;
-        updateTable();
-        updatePagination();
-    });
-
-    // Pagination
-    elements.prevPageBtn.addEventListener('click', () => {
-        if (state.currentPage > 1) {
-            state.currentPage--;
-            updateTable();
-            updatePagination();
-        }
-    });
-
-    elements.nextPageBtn.addEventListener('click', () => {
-        const totalPages = Math.ceil(filterAttributaires().length / state.itemsPerPage);
-        if (state.currentPage < totalPages) {
-            state.currentPage++;
-            updateTable();
-            updatePagination();
-        }
-    });
-
-    // Formulaire
-    elements.modalForm.addEventListener('submit', handleFormSubmit);
-
-    // Gestion affichage champs selon type de personne
-    elements.modalForm.elements['typePersonne'].addEventListener('change', handleTypePersonneChange);
-}
-
-// Gestion affichage champs selon type de personne
+// Gestion du type de personne
 function handleTypePersonneChange() {
     const typePersonne = elements.modalForm.elements['typePersonne'].value;
     const denominationField = document.querySelector('.denomination-field');
@@ -212,13 +238,13 @@ function handleTypePersonneChange() {
     const personnePhysiqueFields = document.querySelectorAll('.personne-physique-field');
 
     if (typePersonne === 'Morale') {
-        denominationField.classList.remove('hidden');
-        registreCommerceField.classList.remove('hidden');
-        personnePhysiqueFields.forEach(el => el.classList.add('hidden'));
+        denominationField?.classList.remove('hidden');
+        registreCommerceField?.classList.remove('hidden');
+        personnePhysiqueFields.forEach(el => el?.classList.add('hidden'));
     } else {
-        denominationField.classList.add('hidden');
-        registreCommerceField.classList.add('hidden');
-        personnePhysiqueFields.forEach(el => el.classList.remove('hidden'));
+        denominationField?.classList.add('hidden');
+        registreCommerceField?.classList.add('hidden');
+        personnePhysiqueFields.forEach(el => el?.classList.remove('hidden'));
     }
 }
 
@@ -252,6 +278,12 @@ async function handleFormSubmit(e) {
 
 // Fonctions modales
 function openAttributaireModal(attributaire = null) {
+    console.log('Opening attributaire modal function called');
+    if (!elements.modal || !elements.modalForm) {
+        console.error('Modal elements not found');
+        return;
+    }
+
     const form = elements.modalForm;
     form.reset();
 
@@ -267,13 +299,31 @@ function openAttributaireModal(attributaire = null) {
         document.getElementById('modalTitle').textContent = 'Nouvel Attributaire';
     }
 
-    elements.modal.classList.remove('hidden');
+    console.log('Showing modal');
+    requestAnimationFrame(() => {
+        elements.modal.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            elements.modal.style.display = 'flex';
+            elements.modal.style.alignItems = 'center';
+            elements.modal.style.justifyContent = 'center';
+        });
+    });
+    handleTypePersonneChange();
 }
 
 function closeAttributaireModal() {
+    if (!elements.modal || !elements.modalForm) return;
+    
+    elements.modal.style.display = 'none';
     elements.modal.classList.add('hidden');
     elements.modalForm.reset();
 }
+
+// Make functions globally available
+window.openAttributaireModal = openAttributaireModal;
+window.closeAttributaireModal = closeAttributaireModal;
+window.editAttributaire = editAttributaire;
+window.deleteAttributaire = deleteAttributaire;
 
 // Édition d'un attributaire
 async function editAttributaire(id) {
@@ -299,8 +349,3 @@ async function deleteAttributaire(id) {
         window.app.notifications.show('Erreur lors de la suppression', 'error');
     }
 }
-
-// Bouton Nouvel Attributaire
-document.getElementById('btnNewAttributaire').addEventListener('click', () => {
-    openAttributaireModal();
-});
